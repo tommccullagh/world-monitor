@@ -11,8 +11,8 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 700,
     title: 'World Monitor',
-    icon: path.join(__dirname, 'public', 'icon.png'),
     backgroundColor: '#0a0e17',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -20,22 +20,30 @@ function createWindow() {
     },
   });
 
-  // Load webpack dev server in development, built files in production
+  // In development, load from webpack dev server
+  // In production (packaged), load the built files from app/
   const isDev = !app.isPackaged;
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, 'app', 'index.html'));
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Handle external links — open in system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    require('electron').shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'public', 'icon.png'));
+  const iconPath = path.join(__dirname, 'public', 'icon.png');
+  tray = new Tray(iconPath);
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open World Monitor', click: () => mainWindow?.show() },
     { type: 'separator' },
@@ -48,8 +56,9 @@ function createTray() {
 
 app.whenReady().then(() => {
   createWindow();
-  // Tray creation may fail in dev without icon, wrap in try/catch
-  try { createTray(); } catch (e) { console.warn('Tray icon not found, skipping:', e.message); }
+  try { createTray(); } catch (e) {
+    console.warn('Tray icon not available, skipping:', e.message);
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -60,7 +69,7 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// IPC handlers for renderer process
+// IPC handlers
 ipcMain.handle('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
